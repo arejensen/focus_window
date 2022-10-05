@@ -8,21 +8,21 @@ use eframe::{
     epaint::{Pos2, Vec2},
 };
 use ffi::get_resolution;
+use focus_window::Window;
 use windows::{
     Win32::Foundation::LPARAM,
-    Win32::UI::WindowsAndMessaging::{EnumWindows, SetForegroundWindow, ShowWindow, SW_SHOWNORMAL},
+    Win32::{
+        Foundation::WPARAM,
+        UI::WindowsAndMessaging::{
+            EnumWindows, PostMessageA, SetForegroundWindow, ShowWindow, SW_SHOWNORMAL, WM_CLOSE,
+            WM_QUIT,
+        },
+    },
     /* for finding type of windows when adding them on ignore list */
     // Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, GWL_EXSTYLE},
 };
 
 fn main() {
-    // Reason for unsafe: FFI calls
-    unsafe {
-        EnumWindows(Some(enum_window), LPARAM(0))
-            .ok()
-            .expect("Unsafe code calling into WIN32 API through FFI failed.");
-    }
-
     let options = default_options();
 
     eframe::run_native(
@@ -32,7 +32,7 @@ fn main() {
     );
 }
 
-fn default_options() -> eframe::NativeOptions {
+pub fn default_options() -> eframe::NativeOptions {
     let window_size = Vec2 { x: 800.0, y: 800.0 };
     let resolution = get_resolution();
     let position = Pos2 {
@@ -63,6 +63,8 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        populate_window();
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 let textbox = ui.add_sized(
@@ -86,17 +88,26 @@ impl eframe::App for MyApp {
             // Unsafe because we deal with the FFI; consider wrapping it
             unsafe {
                 for entry in WINDOW_LIST.iter() {
-                    if entry
-                        .name
-                        .to_lowercase()
-                        .contains(&self.window_name.to_lowercase().trim())
-                        && ui
-                            .add(Label::new(entry.name.clone()).sense(Sense::click()))
-                            .clicked()
-                    {
-                        ShowWindow(entry.window, SW_SHOWNORMAL);
-                        SetForegroundWindow(entry.window);
-                        frame.close();
+                    if matches(entry, &self.window_name) {
+                        let label = ui.add(Label::new(entry.name.clone()).sense(Sense::click()));
+
+                        if label.clicked() {
+                            ShowWindow(entry.window, SW_SHOWNORMAL);
+                            SetForegroundWindow(entry.window);
+                            frame.close();
+                        }
+
+                        if label.has_focus() && ui.input().key_pressed(egui::Key::Delete) {
+                            PostMessageA(entry.window, WM_CLOSE, WPARAM(0), LPARAM(0));
+                        }
+
+                        if label.has_focus()
+                            && ui
+                                .input_mut()
+                                .consume_key(egui::Modifiers::SHIFT, egui::Key::Delete)
+                        {
+                            PostMessageA(entry.window, WM_QUIT, WPARAM(0), LPARAM(0));
+                        }
 
                         /* for finding type of windows when adding them on ignore list */
                         // let code = GetWindowLongPtrW(entry.window, GWL_EXSTYLE);
@@ -105,5 +116,30 @@ impl eframe::App for MyApp {
                 }
             }
         });
+
+        clear_window();
     }
+}
+
+// Reason for unsafe: FFI calls
+fn populate_window() {
+    unsafe {
+        EnumWindows(Some(enum_window), LPARAM(0))
+            .ok()
+            .expect("Unsafe code calling into WIN32 API through FFI failed.");
+    }
+}
+
+// Reason for unsafe: Using static variable used by FFI calls
+fn clear_window() {
+    unsafe {
+        WINDOW_LIST.clear();
+    }
+}
+
+fn matches(entry: &Window, window_name: &str) -> bool {
+    entry
+        .name
+        .to_lowercase()
+        .contains(window_name.to_lowercase().trim())
 }
