@@ -1,12 +1,11 @@
 use std::ops::BitAnd;
 
-use eframe::epaint::Pos2;
 use focus_window::Window;
 use windows::{
     Win32::Foundation::{BOOL, HWND, LPARAM},
     Win32::UI::WindowsAndMessaging::{
-        GetAncestor, GetLastActivePopup, GetSystemMetrics, GetWindowLongPtrW, GetWindowTextW,
-        IsWindow, IsWindowVisible, GA_ROOTOWNER, GWL_EXSTYLE, SM_CXSCREEN, SM_CYSCREEN,
+        GetAncestor, GetLastActivePopup, GetWindowLongPtrW, GetWindowTextW,
+        IsWindow, IsWindowVisible, GA_ROOTOWNER, GWL_EXSTYLE,
         WINDOW_EX_STYLE, WS_EX_TOOLWINDOW,
     },
 };
@@ -47,18 +46,6 @@ pub fn is_alt_tab_window(hwnd: HWND) -> bool {
         }
 
         hwnd_walk == hwnd
-    }
-}
-
-pub fn get_resolution() -> Pos2 {
-    unsafe {
-        let height = GetSystemMetrics(SM_CYSCREEN);
-        let width = GetSystemMetrics(SM_CXSCREEN);
-
-        Pos2 {
-            x: width as f32,
-            y: height as f32,
-        }
     }
 }
 
