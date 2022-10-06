@@ -34,12 +34,12 @@ fn main() {
         height: monitor_size.height,
         width: monitor_size.width,
     };
-    let screen_size = Size {
+    let window_size = Size {
         height: 800,
         width: 600,
     };
 
-    let (gl_window, gl) = create_display(&event_loop, &monitor_size, &screen_size);
+    let (gl_window, gl) = create_display(&event_loop, &monitor_size, &window_size);
     let gl = std::sync::Arc::new(gl);
 
     let mut egui_glow = egui_glow::EguiGlow::new(&event_loop, gl.clone());
@@ -68,8 +68,8 @@ fn main() {
                         if first_draw {
                             textbox.request_focus();
                             gl_window.window().set_inner_size(glutin::dpi::PhysicalSize {
-                                height: monitor_size.height,
-                                width: monitor_size.width,
+                                height: window_size.height,
+                                width: window_size.width,
                             });
                             first_draw = false;
                         }
@@ -212,15 +212,15 @@ struct Size {
 pub(crate) fn create_display(
     event_loop: &glutin::event_loop::EventLoop<()>,
     monitor_size: &Size,
-    screen_size: &Size,
+    window_size: &Size,
 ) -> (
     glutin::WindowedContext<glutin::PossiblyCurrent>,
     glow::Context,
 ) {
     let window_builder = glutin::window::WindowBuilder::new()
         .with_position(LogicalPosition {
-            x: monitor_size.width / 2 - screen_size.width / 2,
-            y: monitor_size.height / 2 - screen_size.height / 2,
+            x: monitor_size.width / 2 - window_size.width / 2,
+            y: monitor_size.height / 2 - window_size.height / 2,
         })
         .with_resizable(false)
         // Setting initial size to 0 then resizing to normal once the screen has
