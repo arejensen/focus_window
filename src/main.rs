@@ -18,6 +18,7 @@ use windows::{
     /* for finding type of windows when adding them on ignore list */
     // Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, GWL_EXSTYLE},
 };
+
 use winit::{dpi::LogicalPosition, event::WindowEvent};
 
 fn main() {
@@ -46,20 +47,15 @@ fn main() {
 
     event_loop.run(move |event, _, control_flow| {
         let mut redraw = || {
-            let repaint_after =
-                egui_glow.run(gl_window.window(), |ctx| {
-                    populate_window();
+            let repaint_after = egui_glow.run(gl_window.window(), |ctx| {
+                populate_window();
 
-                    egui::CentralPanel::default().show(ctx, |ui| {
+                egui::CentralPanel::default().show(ctx, |ui| {
                     ui.horizontal(|ui| {
                         let textbox = ui.add_sized(
                             ui.available_size(),
                             egui::TextEdit::singleline(&mut window_name),
                         );
-
-                        if textbox.has_focus() && ui.input().key_pressed(egui::Key::Enter) {
-                            // figure out how to move to the labels when pressing enter
-                        }
 
                         if ui.input().key_pressed(egui::Key::Escape) {
                             quit = true;
@@ -67,18 +63,28 @@ fn main() {
 
                         if first_draw {
                             textbox.request_focus();
-                            gl_window.window().set_inner_size(glutin::dpi::PhysicalSize {
-                                height: window_size.height,
-                                width: window_size.width,
-                            });
+                            gl_window
+                                .window()
+                                .set_inner_size(glutin::dpi::PhysicalSize {
+                                    height: window_size.height,
+                                    width: window_size.width,
+                                });
                             first_draw = false;
                         }
                     });
 
                     // Unsafe because we deal with the FFI; consider wrapping it
                     unsafe {
-                        for entry in WINDOW_LIST.iter() {
+                        let matched_windows = WINDOW_LIST
+                            .iter()
+                            .filter(|entry| matches(entry, &window_name))
+                            .into_iter();
+                        let window_count = matched_windows.clone().count();
+                        let mut last_entry: Option<&Window> = None;
+
+                        for entry in matched_windows.clone() {
                             if matches(entry, &window_name) {
+                                last_entry = Some(entry);
                                 let label =
                                     ui.add(Label::new(entry.name.clone()).sense(Sense::click()));
 
@@ -105,10 +111,26 @@ fn main() {
                                 // println((){}", code);
                             }
                         }
+                        
+                        // no matter which element is selected, if there's only one entry in the window list,
+                        // we want to open it and close focus_window
+                        if ui.input().key_pressed(egui::Key::Enter)
+                            && window_count == 1
+                        {
+                            match last_entry {
+                                Some(entry) => {
+                                    ShowWindow(entry.window, SW_SHOWNORMAL);
+                                    SetForegroundWindow(entry.window);
+                                    quit = true;
+                                }
+                                None => {}
+                            }
+                            // figure out how to move to the labels when pressing enter
+                        }
                     }
                 });
-                    clear_window();
-                });
+                clear_window();
+            });
 
             *control_flow = if quit {
                 glutin::event_loop::ControlFlow::Exit
