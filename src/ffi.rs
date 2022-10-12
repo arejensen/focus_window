@@ -32,7 +32,7 @@ pub extern "system" fn enum_window(window: HWND, _: LPARAM) -> BOOL {
 
             if text.is_empty() {
                 // note: false is error, not 'not enumerate'
-                return true.into(); 
+                return true.into();
             }
 
             GetWindowThreadProcessId(window, Some(process_id));

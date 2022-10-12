@@ -21,12 +21,15 @@ use windows::{
 
 use winit::{dpi::LogicalPosition, event::WindowEvent};
 
+use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
+
 fn main() {
     let clear_color = [0.1, 0.1, 0.1];
 
-    let mut window_name = "".to_string();
-    let mut first_draw = true;
-    let mut quit = false;
+    let mut window_query = "".to_string();
+    let mut first_event_loop_iteration = true;
+    let mut quit_signaled = false;
 
     let event_loop = glutin::event_loop::EventLoopBuilder::with_user_event().build();
 
@@ -45,23 +48,24 @@ fn main() {
 
     let mut egui_glow = egui_glow::EguiGlow::new(&event_loop, gl.clone());
 
+    let matcher = SkimMatcherV2::default();
+
     event_loop.run(move |event, _, control_flow| {
         let mut redraw = || {
             let repaint_after = egui_glow.run(gl_window.window(), |ctx| {
                 populate_window_list();
-
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.horizontal(|ui| {
                         let textbox = ui.add_sized(
                             ui.available_size(),
-                            egui::TextEdit::singleline(&mut window_name),
+                            egui::TextEdit::singleline(&mut window_query),
                         );
 
                         if ui.input().key_pressed(egui::Key::Escape) {
-                            quit = true;
+                            quit_signaled = true;
                         }
 
-                        if first_draw {
+                        if first_event_loop_iteration {
                             textbox.request_focus();
 
                             gl_window
@@ -72,28 +76,29 @@ fn main() {
                                 });
                             gl_window.window().set_visible(true);
 
-                            first_draw = false;
+                            first_event_loop_iteration = false;
                         }
                     });
 
                     // Unsafe because we deal with the FFI; consider wrapping it
                     unsafe {
-                        let matched_windows = WINDOW_LIST
-                            .iter()
-                            .filter(|entry| textbox_matches_windowname(entry, &window_name))
-                            .into_iter();
-                        let window_count = matched_windows.clone().count();
-                        let mut last_entry: Option<&Window> = None;
+                        WINDOW_LIST.iter_mut().for_each(|entry| {
+                            entry.score = matcher.fuzzy_match(&entry.name, &window_query)
+                        });
 
-                        for entry in matched_windows.clone() {
-                            last_entry = Some(entry);
+                        WINDOW_LIST.retain(|entry| entry.score.is_some());
 
+                        let window_count = WINDOW_LIST.iter().count();
+
+                        let first_entry = WINDOW_LIST.first();
+
+                        for entry in WINDOW_LIST.iter() {
                             let label =
                                 ui.add(Label::new(entry.name.clone()).sense(Sense::click()));
 
                             if label.clicked() {
                                 activate_and_focus_on_window(entry);
-                                quit = true;
+                                quit_signaled = true;
                             }
 
                             if label.has_focus() && ui.input().key_pressed(egui::Key::Delete) {
@@ -116,10 +121,10 @@ fn main() {
                         // no matter which element is selected, if there's only one entry in the window list,
                         // we want to open it and close focus_window
                         if ui.input().key_pressed(egui::Key::Enter) && window_count == 1 {
-                            match last_entry {
+                            match first_entry {
                                 Some(entry) => {
                                     activate_and_focus_on_window(entry);
-                                    quit = true;
+                                    quit_signaled = true;
                                 }
                                 None => {}
                             }
@@ -130,7 +135,7 @@ fn main() {
                 clear_window_list();
             });
 
-            *control_flow = if quit {
+            *control_flow = if quit_signaled {
                 glutin::event_loop::ControlFlow::Exit
             } else if repaint_after.is_zero() {
                 gl_window.window().request_redraw();
@@ -226,13 +231,6 @@ fn clear_window_list() {
     unsafe {
         WINDOW_LIST.clear();
     }
-}
-
-fn textbox_matches_windowname(entry: &Window, window_name: &str) -> bool {
-    entry
-        .name
-        .to_lowercase()
-        .contains(window_name.to_lowercase().trim())
 }
 
 struct Size {
