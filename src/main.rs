@@ -49,7 +49,7 @@ fn main() {
         let mut redraw = || {
             let repaint_after = egui_glow.run(gl_window.window(), |ctx| {
                 populate_window();
-
+                
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.horizontal(|ui| {
                         let textbox = ui.add_sized(
@@ -93,7 +93,11 @@ fn main() {
                                     ui.add(Label::new(entry.name.clone()).sense(Sense::click()));
 
                                 if label.clicked() {
-                                    ShowWindow(entry.window, SW_SHOW);
+                                    if IsIconic(entry.window).as_bool() {
+                                        ShowWindow(entry.window, SW_RESTORE);
+                                    } else {
+                                        ShowWindow(entry.window, SW_SHOW);
+                                    }
                                     SetForegroundWindow(entry.window);
                                     quit = true;
                                 }
