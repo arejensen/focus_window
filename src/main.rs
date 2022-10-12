@@ -11,8 +11,8 @@ use windows::{
     Win32::{
         Foundation::WPARAM,
         UI::WindowsAndMessaging::{
-            EnumWindows, PostMessageA, SetForegroundWindow, ShowWindow, SW_SHOWNORMAL, WM_CLOSE,
-            WM_QUIT,
+            EnumWindows, IsIconic, PostMessageA, SetForegroundWindow, ShowWindow, SW_RESTORE,
+            SW_SHOW, WM_CLOSE, WM_QUIT,
         },
     },
     /* for finding type of windows when adding them on ignore list */
@@ -63,12 +63,16 @@ fn main() {
 
                         if first_draw {
                             textbox.request_focus();
+
                             gl_window
                                 .window()
                                 .set_inner_size(glutin::dpi::PhysicalSize {
                                     height: window_size.height,
                                     width: window_size.width,
                                 });
+
+                            gl_window.window().set_visible(true);
+
                             first_draw = false;
                         }
                     });
@@ -89,7 +93,7 @@ fn main() {
                                     ui.add(Label::new(entry.name.clone()).sense(Sense::click()));
 
                                 if label.clicked() {
-                                    ShowWindow(entry.window, SW_SHOWNORMAL);
+                                    ShowWindow(entry.window, SW_SHOW);
                                     SetForegroundWindow(entry.window);
                                     quit = true;
                                 }
@@ -111,15 +115,17 @@ fn main() {
                                 // println((){}", code);
                             }
                         }
-                        
+
                         // no matter which element is selected, if there's only one entry in the window list,
                         // we want to open it and close focus_window
-                        if ui.input().key_pressed(egui::Key::Enter)
-                            && window_count == 1
-                        {
+                        if ui.input().key_pressed(egui::Key::Enter) && window_count == 1 {
                             match last_entry {
                                 Some(entry) => {
-                                    ShowWindow(entry.window, SW_SHOWNORMAL);
+                                    if IsIconic(entry.window).as_bool() {
+                                        ShowWindow(entry.window, SW_RESTORE);
+                                    } else {
+                                        ShowWindow(entry.window, SW_SHOW);
+                                    }
                                     SetForegroundWindow(entry.window);
                                     quit = true;
                                 }
@@ -252,6 +258,7 @@ pub(crate) fn create_display(
             height: 0.0,
         })
         .with_decorations(false)
+        .with_visible(false)
         .with_title("focus_window");
 
     let gl_window = unsafe {
