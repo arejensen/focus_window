@@ -48,8 +48,8 @@ fn main() {
     event_loop.run(move |event, _, control_flow| {
         let mut redraw = || {
             let repaint_after = egui_glow.run(gl_window.window(), |ctx| {
-                populate_window();
-                
+                populate_window_list();
+
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.horizontal(|ui| {
                         let textbox = ui.add_sized(
@@ -70,7 +70,6 @@ fn main() {
                                     height: window_size.height,
                                     width: window_size.width,
                                 });
-
                             gl_window.window().set_visible(true);
 
                             first_draw = false;
@@ -81,43 +80,37 @@ fn main() {
                     unsafe {
                         let matched_windows = WINDOW_LIST
                             .iter()
-                            .filter(|entry| matches(entry, &window_name))
+                            .filter(|entry| textbox_matches_windowname(entry, &window_name))
                             .into_iter();
                         let window_count = matched_windows.clone().count();
                         let mut last_entry: Option<&Window> = None;
 
                         for entry in matched_windows.clone() {
-                            if matches(entry, &window_name) {
-                                last_entry = Some(entry);
-                                let label =
-                                    ui.add(Label::new(entry.name.clone()).sense(Sense::click()));
+                            last_entry = Some(entry);
 
-                                if label.clicked() {
-                                    if IsIconic(entry.window).as_bool() {
-                                        ShowWindow(entry.window, SW_RESTORE);
-                                    } else {
-                                        ShowWindow(entry.window, SW_SHOW);
-                                    }
-                                    SetForegroundWindow(entry.window);
-                                    quit = true;
-                                }
+                            let label =
+                                ui.add(Label::new(entry.name.clone()).sense(Sense::click()));
 
-                                if label.has_focus() && ui.input().key_pressed(egui::Key::Delete) {
-                                    PostMessageA(entry.window, WM_CLOSE, WPARAM(0), LPARAM(0));
-                                }
-
-                                if label.has_focus()
-                                    && ui
-                                        .input_mut()
-                                        .consume_key(egui::Modifiers::SHIFT, egui::Key::Delete)
-                                {
-                                    PostMessageA(entry.window, WM_QUIT, WPARAM(0), LPARAM(0));
-                                }
-
-                                /* for finding type of windows when adding them on ignore list */
-                                // let code = GetWindowLongPtrW(entry.window, GWL_EXSTYLE);
-                                // println((){}", code);
+                            if label.clicked() {
+                                activate_and_focus_on_window(entry);
+                                quit = true;
                             }
+
+                            if label.has_focus() && ui.input().key_pressed(egui::Key::Delete) {
+                                PostMessageA(entry.window, WM_CLOSE, WPARAM(0), LPARAM(0));
+                            }
+
+                            if label.has_focus()
+                                && ui
+                                    .input_mut()
+                                    .consume_key(egui::Modifiers::SHIFT, egui::Key::Delete)
+                            {
+                                PostMessageA(entry.window, WM_QUIT, WPARAM(0), LPARAM(0));
+                            }
+
+                            /* for finding type of windows when adding them on ignore list */
+                            // let code = GetWindowLongPtrW(entry.window, GWL_EXSTYLE);
+                            // println((){}", code);
                         }
 
                         // no matter which element is selected, if there's only one entry in the window list,
@@ -125,12 +118,7 @@ fn main() {
                         if ui.input().key_pressed(egui::Key::Enter) && window_count == 1 {
                             match last_entry {
                                 Some(entry) => {
-                                    if IsIconic(entry.window).as_bool() {
-                                        ShowWindow(entry.window, SW_RESTORE);
-                                    } else {
-                                        ShowWindow(entry.window, SW_SHOW);
-                                    }
-                                    SetForegroundWindow(entry.window);
+                                    activate_and_focus_on_window(entry);
                                     quit = true;
                                 }
                                 None => {}
@@ -139,7 +127,7 @@ fn main() {
                         }
                     }
                 });
-                clear_window();
+                clear_window_list();
             });
 
             *control_flow = if quit {
@@ -214,7 +202,18 @@ fn main() {
     });
 }
 
-fn populate_window() {
+fn activate_and_focus_on_window(entry: &Window) {
+    unsafe {
+        if IsIconic(entry.window).as_bool() {
+            ShowWindow(entry.window, SW_RESTORE);
+        } else {
+            ShowWindow(entry.window, SW_SHOW);
+        }
+        SetForegroundWindow(entry.window);
+    }
+}
+
+fn populate_window_list() {
     unsafe {
         EnumWindows(Some(enum_window), LPARAM(0))
             .ok()
@@ -223,13 +222,13 @@ fn populate_window() {
 }
 
 // Reason for unsafe: Using static variable used by FFI calls
-fn clear_window() {
+fn clear_window_list() {
     unsafe {
         WINDOW_LIST.clear();
     }
 }
 
-fn matches(entry: &Window, window_name: &str) -> bool {
+fn textbox_matches_windowname(entry: &Window, window_name: &str) -> bool {
     entry
         .name
         .to_lowercase()
@@ -256,7 +255,8 @@ pub(crate) fn create_display(
         })
         .with_resizable(false)
         // Setting initial size to 0 then resizing to normal once the screen has
-        // been drawn works around issue described here: https://github.com/emilk/egui/issues/1802
+        // been drawn (partially) works around issue described here: https://github.com/emilk/egui/issues/1802
+        // Setting the window to visible = false also helps
         .with_inner_size(glutin::dpi::LogicalSize {
             width: 0.0,
             height: 0.0,
